@@ -1,512 +1,548 @@
-import { useState, useMemo } from 'react';
-import {
-  Plus,
-  Filter,
-  Download,
-  Search,
-  ArrowDownUp,
-  ArrowUpRight,
-  ArrowDownRight,
-  MoreHorizontal,
-  X,
-  Wallet,
-  TrendingUp,
-  TrendingDown,
-  Eye,
-  Pencil,
-  Trash2,
-} from 'lucide-react';
-import { cashBankTransactions } from '../data/mockData';
-import type { CashBankTransaction, TransactionType, TransactionStatus } from '../data/mockData';
-import Badge from '../components/Badge';
+// src/pages/CashBankPage.tsx
 
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(value);
-}
-
-function formatDate(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-}
+// ==========================================
+// ၁။ လိုအပ်သော Packages နှင့် Services များကို ခေါ်ယူခြင်း (Imports)
+// ==========================================
+import { useState, useEffect } from 'react';
+import { Plus, Search, Download, RefreshCw, X, Pencil, Trash2, ArrowRight } from 'lucide-react';
+import { googleSheetsService } from '../services/googleSheetsService';
 
 export default function CashBankPage() {
-  const [transactions, setTransactions] = useState<CashBankTransaction[]>(cashBankTransactions);
-  const [search, setSearch] = useState('');
-  const [typeFilter, setTypeFilter] = useState<TransactionType | 'All'>('All');
-  const [statusFilter, setStatusFilter] = useState<TransactionStatus | 'All'>('All');
-  const [showFilters, setShowFilters] = useState(false);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [sortField, setSortField] = useState<keyof CashBankTransaction>('date');
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  // ==========================================
+  // ၂။ State များ ကြေညာခြင်း (Variables)
+  // ==========================================
+  
+  // ၂.၁ Table တွင်ပြသမည့် Data များ
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [coaList, setCoaList] = useState<any[]>([]);
+  
+  // ၂.၂ Loading နှင့် Error အခြေအနေများ
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const filtered = useMemo(() => {
-    let result = transactions.filter((t) => {
-      const matchesSearch =
-        t.description.toLowerCase().includes(search.toLowerCase()) ||
-        t.counterparty.toLowerCase().includes(search.toLowerCase()) ||
-        t.reference.toLowerCase().includes(search.toLowerCase()) ||
-        t.id.toLowerCase().includes(search.toLowerCase());
-      const matchesType = typeFilter === 'All' || t.type === typeFilter;
-      const matchesStatus = statusFilter === 'All' || t.status === statusFilter;
-      return matchesSearch && matchesType && matchesStatus;
+  // ၂.၃ Modal (Form Box) အဖွင့်အပိတ် နှင့် Submit အခြေအနေများ
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingRow, setEditingRow] = useState<any | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // ၂.၄ Search Bar နှင့် Delete Popup အတွက် States များ
+  const [searchQuery, setSearchQuery] = useState('');
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  
+  // ၂.၅ Transaction အမျိုးအစား (Expense, Income, Transfer)
+  const [txnType, setTxnType] = useState<'Expense' | 'Income' | 'Transfer'>('Expense');
+
+  // ==========================================
+  // ၂.၆ Form တွင် အသုံးပြုမည့် မူလအလွတ် Data ပုံစံ
+  // ==========================================
+  const initialForm = {
+    Date: new Date().toISOString().split('T')[0],
+    Voucher_No: '',
+    Reference_No: '',
+    Project_Code: '',
+    Receiver: '', 
+    Description: '',
+    Book_Name: '',    
+    From_Book: '',    
+    To_Book: '',      
+    Account_Code: '', 
+    Txn_Currency: 'MMK',
+    Exchange_Rate: '1',
+    Amount: '',       
+    To_Amount: '',
+    Base_Amount_MMK: '' // 🟢 အသစ်တိုးထားသည် 🟢
+  };
+
+  const [formData, setFormData] = useState(initialForm);
+
+  // Edit Modal ဖွင့်ရန် Function (Hardcoded Currency အမှားကို ပြင်ဆင်ထားသည်)
+  const openEditModal = (txn: any) => {
+    setEditingRow(txn);
+    let type: 'Expense' | 'Income' | 'Transfer' = 'Expense';
+    if (txn.Account_Name === 'Fund Transfer') type = 'Transfer';
+    else if (txn.Account_Code_Debit === getBookAccountCode(txn.Book)) type = 'Income';
+    
+    setTxnType(type);
+    
+    // Book Name ထဲမှ Currency ခွဲထုတ်ခြင်း
+    const bookName = txn.Book || '';
+    const currency = bookName ? String(bookName).slice(-3).toUpperCase() : 'MMK';
+    const isForeign = ['USD', 'SGD'].includes(currency);
+
+    setFormData({
+      Date: txn.Date ? new Date(txn.Date).toISOString().split('T')[0] : '',
+      Voucher_No: txn.Voucher_No || '',
+      Reference_No: txn.Reference_No || '',
+      Project_Code: txn.Project_Code || '',
+      Receiver: txn.Receiver || '',
+      Description: txn.Description || '',
+      Book_Name: type !== 'Transfer' ? bookName : '',
+      From_Book: type === 'Transfer' ? bookName : '',
+      To_Book: '', 
+      Account_Code: type === 'Expense' ? txn.Account_Code_Debit : txn.Account_Code_Credit,
+      Txn_Currency: isForeign ? currency : 'MMK', // 🟢 Edit ချိန်တွင် Currency အမှန်ပေါ်စေမည် 🟢
+      Exchange_Rate: txn.Exchange_Rate_USD || txn.Exchange_Rate_SGD || '1',
+      Amount: txn.Amount_USD || txn.Amount_SGD || txn.Amount_MMK || '',
+      To_Amount: '',
+      Base_Amount_MMK: txn.Amount_MMK || '' // 🟢 Edit ချိန်တွင် Base MMK ကို ယူမည် 🟢
     });
+    setIsModalOpen(true);
+  };
 
-    result = [...result].sort((a, b) => {
-      const aVal = a[sortField];
-      const bVal = b[sortField];
-      if (typeof aVal === 'number' && typeof bVal === 'number') {
-        return sortDir === 'asc' ? aVal - bVal : bVal - aVal;
-      }
-      return sortDir === 'asc'
-        ? String(aVal).localeCompare(String(bVal))
-        : String(bVal).localeCompare(String(aVal));
-    });
-
-    return result;
-  }, [transactions, search, typeFilter, statusFilter, sortField, sortDir]);
-
-  const totalReceipts = filtered.filter((t) => t.type === 'Receipt').reduce((sum, t) => sum + t.amount, 0);
-  const totalPayments = filtered.filter((t) => t.type === 'Payment').reduce((sum, t) => sum + t.amount, 0);
-  const netCash = totalReceipts - totalPayments;
-
-  const handleSort = (field: keyof CashBankTransaction) => {
-    if (sortField === field) {
-      setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortField(field);
-      setSortDir('desc');
+  // ==========================================
+  // ၃။ Data ဆွဲယူခြင်း (Fetch Data)
+  // ==========================================
+  const fetchAllData = async () => {
+    setIsLoading(true);
+    try {
+      const [txnData, coaData] = await Promise.all([
+        googleSheetsService.readData('5_Cash_And_Bank'),
+        googleSheetsService.readData('1_Chart_Of_Accounts').catch(() => [])
+      ]);
+      setTransactions(txnData);
+      setCoaList(coaData);
+    } catch (err) {
+      setError("ဒေတာများ ရယူရာတွင် အခက်အခဲရှိနေပါသည်။");
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleDelete = (id: string) => {
-    setTransactions(transactions.filter((t) => t.id !== id));
-    setOpenMenuId(null);
+  useEffect(() => { fetchAllData(); }, []);
+
+  // ==========================================
+  // ၄။ Helper Functions (အကူအညီပေးသော Functions များ)
+  // ==========================================
+  
+  // ၄.၁ COA ထဲမှ Book ဖြစ်သော စာရင်းများနှင့်၊ သာမန် Account များကို ခွဲထုတ်ခြင်း
+  const bookAccounts = coaList.filter((a: any) => a.Book && String(a.Book).trim() !== '');
+  const generalAccounts = coaList.filter((a: any) => !a.Book || String(a.Book).trim() === '');
+
+  // ၄.၂ Book Name ကိုပေးလိုက်လျှင် သူ၏ Account Code ကို ရှာပေးမည့် Function
+  const getBookAccountCode = (bookName: string) => {
+    const book = bookAccounts.find((a: any) => a.Book === bookName);
+    return book ? book.Account_Code : '';
   };
 
-  const handleAdd = (newTx: Omit<CashBankTransaction, 'id'>) => {
-    const id = `CB-${String(transactions.length + 1).padStart(3, '0')}`;
-    setTransactions([{ ...newTx, id }, ...transactions]);
-    setShowAddModal(false);
+  // ၄.၃ Account Code ကိုပေးလိုက်လျှင် အသေးစိတ်အချက်အလက်ကို ရှာပေးမည့် Function
+  const getGeneralAccount = (code: string) => {
+    return generalAccounts.find((a: any) => String(a.Account_Code) === String(code)) || {};
   };
 
-  const handleExport = () => {
-    const headers = ['ID', 'Date', 'Type', 'Account', 'Description', 'Counterparty', 'Amount', 'Currency', 'Status', 'Reference'];
-    const rows = filtered.map((t) =>
-      [t.id, t.date, t.type, t.account, `"${t.description}"`, `"${t.counterparty}"`, t.amount, t.currency, t.status, t.reference].join(',')
+  // ==========================================
+  // ၅။ တွက်ချက်မှုများ (Calculations - Base MMK)
+  // ==========================================
+  const calculateBaseMMK = () => {
+    if (txnType === 'Transfer') {
+      const fromCurr = formData.From_Book ? String(formData.From_Book).slice(-3).toUpperCase() : '';
+      const toCurr = formData.To_Book ? String(formData.To_Book).slice(-3).toUpperCase() : '';
+      
+      if (fromCurr === 'MMK') return parseFloat(formData.Amount || '0');
+      if (toCurr === 'MMK') return parseFloat(formData.To_Amount || '0');
+      
+      return parseFloat(formData.Amount || '0') * parseFloat(formData.Exchange_Rate || '1');
+    } else {
+      return parseFloat(formData.Amount || '0') * parseFloat(formData.Exchange_Rate || '1');
+    }
+  };
+
+  // ==========================================
+  // ၆။ Input အပြောင်းအလဲများကို ဖမ်းယူခြင်း (Handle Inputs)
+  // ==========================================
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    
+    setFormData((prev: any) => {
+      let newData = { ...prev, [name]: value };
+
+      // Book ပြောင်းလျှင် Currency နှင့် Exchange Rate သတ်မှတ်ခြင်း
+      if (name === 'Book_Name' || name === 'From_Book') {
+        const currency = value.slice(-3).toUpperCase();
+        const isForeign = ['USD', 'SGD'].includes(currency);
+        newData.Txn_Currency = isForeign ? currency : 'MMK';
+        newData.Exchange_Rate = isForeign ? prev.Exchange_Rate : '1';
+        
+        // Base MMK ကို ချက်ချင်းပြန်တွက်မည်
+        newData.Base_Amount_MMK = (parseFloat(newData.Amount || '0') * parseFloat(newData.Exchange_Rate || '1')).toString();
+      }
+
+      // Amount သို့မဟုတ် Exchange_Rate ပြင်လျှင် Base MMK ကို Auto တွက်မည်
+      if (name === 'Amount' || name === 'Exchange_Rate') {
+        newData.Base_Amount_MMK = (parseFloat(newData.Amount || '0') * parseFloat(newData.Exchange_Rate || '1')).toString();
+      }
+
+      return newData;
+    });
+  };
+
+  // ==========================================
+  // ၇။ Form Data သိမ်းဆည်းခြင်း (Submit/Save Transaction)
+  // ==========================================
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    try {
+      // 🟢 Auto တွက်ထားသည့် သို့မဟုတ် User ပြင်ထားသည့် Base Amount ကို တိုက်ရိုက်ယူမည် 🟢
+      const base_mmk = parseFloat(formData.Base_Amount_MMK || '0'); 
+      let isUSD = false, isSGD = false;
+      let foreignAmount = '';
+
+      // Currency တွက်ချက်ခြင်း
+      if (txnType === 'Transfer') {
+        const fromCurr = formData.From_Book ? String(formData.From_Book).slice(-3).toUpperCase() : '';
+        const toCurr = formData.To_Book ? String(formData.To_Book).slice(-3).toUpperCase() : '';
+        if (fromCurr === 'USD' || toCurr === 'USD') { isUSD = true; foreignAmount = fromCurr === 'USD' ? formData.Amount : formData.To_Amount; }
+        if (fromCurr === 'SGD' || toCurr === 'SGD') { isSGD = true; foreignAmount = fromCurr === 'SGD' ? formData.Amount : formData.To_Amount; }
+      } else {
+        isUSD = formData.Txn_Currency === 'USD';
+        isSGD = formData.Txn_Currency === 'SGD';
+        foreignAmount = formData.Amount;
+      }
+
+      // Google Sheet သို့ပို့မည့် Data ပုံစံ (Payload)
+      let payload: any = {
+        Date: formData.Date,
+        Voucher_No: formData.Voucher_No,
+        Reference_No: formData.Reference_No,
+        Project_Code: formData.Project_Code,
+        Receiver: formData.Receiver,
+        Description: formData.Description,
+        Amount_MMK: base_mmk,
+        Amount_USD: isUSD ? foreignAmount : '',
+        Amount_SGD: isSGD ? foreignAmount : '',
+        Exchange_Rate_USD: isUSD ? formData.Exchange_Rate : '',
+        Exchange_Rate_SGD: isSGD ? formData.Exchange_Rate : '',
+      };
+
+      // ၇.၁ Income/Expense နှင့် Transfer Logic အသစ်များ
+      if (txnType === 'Income') {
+        // Income = Debit: Cash Book, Credit: Income Account
+        const genAcc = getGeneralAccount(formData.Account_Code); 
+        payload.Book = formData.Book_Name;
+        payload.Account_Code_Debit = getBookAccountCode(formData.Book_Name); // Book ရဲ့ Account Code
+        payload.Account_Code_Credit = formData.Account_Code; // ရွေးထားတဲ့ Income Code
+        payload.Account_Name = genAcc.Account_Name || 'Income';
+        payload.Class_Of_Account = genAcc.Class_Of_Account || 'Income';
+      } 
+      else if (txnType === 'Expense') {
+        // Expense = Debit: Expense Account, Credit: Cash Book
+        const genAcc = getGeneralAccount(formData.Account_Code);
+        payload.Book = formData.Book_Name;
+        payload.Account_Code_Debit = formData.Account_Code; // ရွေးထားတဲ့ Expense Code
+        payload.Account_Code_Credit = getBookAccountCode(formData.Book_Name); // Book ရဲ့ Account Code
+        payload.Account_Name = genAcc.Account_Name || 'Expense';
+        payload.Class_Of_Account = genAcc.Class_Of_Account || 'Expense';
+      } 
+      else if (txnType === 'Transfer') {
+        // Transfer = Debit: To Book, Credit: From Book
+        payload.Book = formData.From_Book; 
+        payload.Account_Code_Debit = getBookAccountCode(formData.To_Book);
+        payload.Account_Code_Credit = getBookAccountCode(formData.From_Book);
+        payload.Account_Name = 'Fund Transfer';
+        payload.Class_Of_Account = 'Asset Transfer';
+      }
+
+      // Data ပို့ခြင်း
+      if (editingRow) {
+        payload._rowIndex = editingRow._rowIndex;
+        await googleSheetsService.updateData('5_Cash_And_Bank', payload);
+      } else {
+        await googleSheetsService.writeData('5_Cash_And_Bank', payload);
+      }
+
+      setIsModalOpen(false);
+      setEditingRow(null);
+      setFormData(initialForm);
+      setTxnType('Expense');
+      fetchAllData();
+    } catch (err) {
+      alert("Error saving data.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // ==========================================
+  // ၈။ ဖျက်ရန် အတည်ပြုခြင်း (Delete Action)
+  // ==========================================
+  const confirmDelete = async () => {
+    if (deleteConfirmId === null) return;
+    setIsDeleting(true);
+    try {
+      await googleSheetsService.deleteData('5_Cash_And_Bank', deleteConfirmId);
+      setTransactions((prev: any[]) => prev.filter((t: any) => t._rowIndex !== deleteConfirmId));
+      setDeleteConfirmId(null);
+    } catch (err) {
+      alert("Error deleting data.");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const openAddModal = () => {
+    setEditingRow(null);
+    setFormData(initialForm);
+    setTxnType('Expense');
+    setIsModalOpen(true);
+  };
+
+  // ==========================================
+  // ၉။ Search Filter (ရှာဖွေခြင်း)
+  // ==========================================
+  const filteredTransactions = transactions.filter((txn: any) => {
+    if (!searchQuery) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      (txn.Voucher_No?.toLowerCase() || '').includes(query) ||
+      (txn.Description?.toLowerCase() || '').includes(query) ||
+      (txn.Receiver?.toLowerCase() || '').includes(query) ||
+      (txn.Book?.toLowerCase() || '').includes(query)
     );
-    const csv = [headers.join(','), ...rows].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'cash-bank-transactions.csv';
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  });
 
-  const hasActiveFilters = typeFilter !== 'All' || statusFilter !== 'All';
-
+  // ==========================================
+  // ၁၀။ UI ရေးဆွဲခြင်း (Render)
+  // ==========================================
   return (
-    <div className="space-y-5">
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white rounded-xl border border-slate-200 p-4 flex items-center gap-4">
-          <div className="w-11 h-11 rounded-lg bg-emerald-50 flex items-center justify-center">
-            <ArrowDownRight className="w-5 h-5 text-emerald-600" />
-          </div>
-          <div>
-            <p className="text-xs text-slate-500">Total Receipts</p>
-            <p className="text-xl font-bold text-slate-800">{formatCurrency(totalReceipts)}</p>
-          </div>
+    <div className="space-y-6 relative">
+      
+      {/* ၁၀.၁ ခေါင်းစဉ်နှင့် Action ခလုတ်များ */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-800">Cash & Bank (Double Entry)</h2>
+          <p className="text-sm text-slate-500">Manage Multi-Currency Receipts, Payments & Transfers</p>
         </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-4 flex items-center gap-4">
-          <div className="w-11 h-11 rounded-lg bg-rose-50 flex items-center justify-center">
-            <ArrowUpRight className="w-5 h-5 text-rose-500" />
-          </div>
-          <div>
-            <p className="text-xs text-slate-500">Total Payments</p>
-            <p className="text-xl font-bold text-slate-800">{formatCurrency(totalPayments)}</p>
-          </div>
-        </div>
-        <div className={`bg-white rounded-xl border border-slate-200 p-4 flex items-center gap-4`}>
-          <div className={`w-11 h-11 rounded-lg flex items-center justify-center ${netCash >= 0 ? 'bg-brand-50' : 'bg-red-50'}`}>
-            <Wallet className={`w-5 h-5 ${netCash >= 0 ? 'text-brand-600' : 'text-red-500'}`} />
-          </div>
-          <div>
-            <p className="text-xs text-slate-500">Net Cash Flow</p>
-            <p className={`text-xl font-bold ${netCash >= 0 ? 'text-slate-800' : 'text-red-600'}`}>
-              {formatCurrency(netCash)}
-            </p>
-          </div>
-        </div>
+        <button onClick={openAddModal} className="bg-brand-600 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 hover:bg-brand-700 shadow-sm">
+          <Plus className="w-4 h-4" /> Add Entry
+        </button>
       </div>
 
-      {/* Toolbar */}
-      <div className="bg-white rounded-xl border border-slate-200">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 p-4 border-b border-slate-100">
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+        
+        {/* ၁၀.၂ Search Bar */}
+        <div className="p-4 border-b border-slate-100 flex items-center gap-4">
           <div className="relative flex-1 max-w-md">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Search transactions..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:border-brand-300 focus:ring-2 focus:ring-brand-100 outline-none transition-all"
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input 
+              type="text" placeholder="Search by Voucher No, Description or Book..." 
+              value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-brand-500"
             />
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              className={`inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg border transition-colors ${
-                hasActiveFilters
-                  ? 'border-brand-200 bg-brand-50 text-brand-700'
-                  : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-              }`}
-            >
-              <Filter className="w-4 h-4" />
-              Filter
-              {hasActiveFilters && (
-                <span className="w-1.5 h-1.5 rounded-full bg-brand-500" />
-              )}
-            </button>
-            <button
-              onClick={handleExport}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors"
-            >
-              <Download className="w-4 h-4" />
-              <span className="hidden sm:inline">Export</span>
-            </button>
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg bg-brand-600 text-white hover:bg-brand-700 transition-colors shadow-sm shadow-brand-500/20"
-            >
-              <Plus className="w-4 h-4" />
-              <span className="hidden sm:inline">Add Transaction</span>
-              <span className="sm:hidden">Add</span>
-            </button>
           </div>
         </div>
 
-        {/* Filter Panel */}
-        {showFilters && (
-          <div className="flex flex-wrap items-center gap-3 p-4 bg-slate-50 border-b border-slate-100 animate-fade-in">
-            <div>
-              <label className="text-xs font-medium text-slate-500 mr-2">Type</label>
-              <select
-                value={typeFilter}
-                onChange={(e) => setTypeFilter(e.target.value as TransactionType | 'All')}
-                className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white focus:border-brand-300 focus:ring-2 focus:ring-brand-100 outline-none"
-              >
-                <option value="All">All Types</option>
-                <option value="Receipt">Receipt</option>
-                <option value="Payment">Payment</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-slate-500 mr-2">Status</label>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as TransactionStatus | 'All')}
-                className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white focus:border-brand-300 focus:ring-2 focus:ring-brand-100 outline-none"
-              >
-                <option value="All">All Statuses</option>
-                <option value="Completed">Completed</option>
-                <option value="Pending">Pending</option>
-                <option value="Reconciled">Reconciled</option>
-              </select>
-            </div>
-            {hasActiveFilters && (
-              <button
-                onClick={() => {
-                  setTypeFilter('All');
-                  setStatusFilter('All');
-                }}
-                className="text-xs text-brand-600 hover:text-brand-700 font-medium ml-auto"
-              >
-                Clear filters
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* Table */}
+        {/* ၁၀.၃ Table ဇယား */}
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-100 bg-slate-50/50">
-                <th
-                  className="text-left px-4 py-3 font-semibold text-slate-600 cursor-pointer hover:text-slate-800 select-none"
-                  onClick={() => handleSort('id')}
-                >
-                  <span className="flex items-center gap-1">
-                    ID
-                    <ArrowDownUp className="w-3 h-3" />
-                  </span>
-                </th>
-                <th
-                  className="text-left px-4 py-3 font-semibold text-slate-600 cursor-pointer hover:text-slate-800 select-none"
-                  onClick={() => handleSort('date')}
-                >
-                  <span className="flex items-center gap-1">
-                    Date
-                    <ArrowDownUp className="w-3 h-3" />
-                  </span>
-                </th>
-                <th className="text-left px-4 py-3 font-semibold text-slate-600">Type</th>
-                <th className="text-left px-4 py-3 font-semibold text-slate-600">Account</th>
-                <th className="text-left px-4 py-3 font-semibold text-slate-600">Description</th>
-                <th className="text-left px-4 py-3 font-semibold text-slate-600">Counterparty</th>
-                <th
-                  className="text-right px-4 py-3 font-semibold text-slate-600 cursor-pointer hover:text-slate-800 select-none"
-                  onClick={() => handleSort('amount')}
-                >
-                  <span className="flex items-center justify-end gap-1">
-                    Amount
-                    <ArrowDownUp className="w-3 h-3" />
-                  </span>
-                </th>
-                <th className="text-left px-4 py-3 font-semibold text-slate-600">Status</th>
-                <th className="text-left px-4 py-3 font-semibold text-slate-600">Reference</th>
-                <th className="px-4 py-3"></th>
+          <table className="w-full text-left text-sm whitespace-nowrap">
+            <thead className="bg-slate-50 text-slate-500">
+              <tr>
+                <th className="px-4 py-3">Date</th>
+                <th className="px-4 py-3">Voucher No</th>
+                <th className="px-4 py-3">Book</th>
+                <th className="px-4 py-3 text-emerald-600">Debit A/C</th>
+                <th className="px-4 py-3 text-rose-600">Credit A/C</th>
+                <th className="px-4 py-3">A/C Name</th>
+                <th className="px-4 py-3 text-right">Base (MMK)</th>
+                <th className="px-4 py-3 text-center">FX Info</th>
+                <th className="px-4 py-3 text-center">Actions</th>
               </tr>
             </thead>
-            <tbody>
-              {filtered.map((tx) => (
-                <tr
-                  key={tx.id}
-                  className="border-b border-slate-50 hover:bg-slate-50/70 transition-colors group"
-                >
-                  <td className="px-4 py-3 font-medium text-slate-700">{tx.id}</td>
-                  <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{formatDate(tx.date)}</td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`inline-flex items-center gap-1 text-xs font-medium ${
-                        tx.type === 'Receipt' ? 'text-emerald-600' : 'text-rose-500'
-                      }`}
-                    >
-                      {tx.type === 'Receipt' ? (
-                        <TrendingUp className="w-3.5 h-3.5" />
-                      ) : (
-                        <TrendingDown className="w-3.5 h-3.5" />
-                      )}
-                      {tx.type}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{tx.account}</td>
-                  <td className="px-4 py-3 text-slate-700 max-w-xs truncate">{tx.description}</td>
-                  <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{tx.counterparty}</td>
-                  <td className="px-4 py-3 text-right font-semibold whitespace-nowrap">
-                    <span className={tx.type === 'Receipt' ? 'text-emerald-600' : 'text-slate-800'}>
-                      {tx.type === 'Receipt' ? '+' : '−'}
-                      {formatCurrency(tx.amount)}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge status={tx.status} />
-                  </td>
-                  <td className="px-4 py-3 text-slate-500 text-xs font-mono">{tx.reference}</td>
-                  <td className="px-4 py-3 relative">
-                    <button
-                      onClick={() => setOpenMenuId(openMenuId === tx.id ? null : tx.id)}
-                      className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-400 hover:text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      <MoreHorizontal className="w-4 h-4" />
-                    </button>
-                    {openMenuId === tx.id && (
-                      <>
-                        <div className="fixed inset-0 z-10" onClick={() => setOpenMenuId(null)} />
-                        <div className="absolute right-8 top-1/2 -translate-y-1/2 w-40 bg-white rounded-lg shadow-xl border border-slate-200 z-20 py-1 animate-fade-in">
-                          <button className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50">
-                            <Eye className="w-4 h-4" /> View
-                          </button>
-                          <button className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50">
-                            <Pencil className="w-4 h-4" /> Edit
-                          </button>
-                          <button
-                            onClick={() => handleDelete(tx.id)}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
-                          >
-                            <Trash2 className="w-4 h-4" /> Delete
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </td>
-                </tr>
-              ))}
+            <tbody className="divide-y divide-slate-100 text-slate-600">
+              {isLoading && transactions.length === 0 ? (
+                 <tr><td colSpan={9} className="px-6 py-8 text-center text-slate-500">Loading transactions...</td></tr>
+              ) : filteredTransactions.length === 0 ? (
+                 <tr><td colSpan={9} className="px-6 py-8 text-center text-slate-500">No matching transactions found.</td></tr>
+              ) : (
+                filteredTransactions.map((txn, idx) => (
+                  <tr key={idx} className="hover:bg-slate-50">
+                    <td className="px-4 py-3">{txn.Date ? new Date(txn.Date).toLocaleDateString() : '-'}</td>
+                    <td className="px-4 py-3 font-medium text-slate-900">{txn.Voucher_No}</td>
+                    <td className="px-4 py-3"><span className="px-2 py-1 bg-slate-100 rounded text-xs">{txn.Book}</span></td>
+                    <td className="px-4 py-3 font-mono text-emerald-600">{txn.Account_Code_Debit}</td>
+                    <td className="px-4 py-3 font-mono text-rose-600">{txn.Account_Code_Credit}</td>
+                    <td className="px-4 py-3 truncate max-w-[150px]" title={txn.Account_Name}>{txn.Account_Name}</td>
+                    <td className="px-4 py-3 text-right font-medium text-slate-800">{txn.Amount_MMK ? Number(txn.Amount_MMK).toLocaleString() : '0'}</td>
+                    <td className="px-4 py-3 text-center">
+                      {txn.Amount_USD ? <span className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded">USD: {txn.Amount_USD} (@{txn.Exchange_Rate_USD})</span> : 
+                       txn.Amount_SGD ? <span className="text-xs bg-red-50 text-red-600 px-2 py-1 rounded">SGD: {txn.Amount_SGD} (@{txn.Exchange_Rate_SGD})</span> : '-'}
+                    </td>
+                    <td className="px-4 py-3 flex justify-center gap-2">
+                      {/* Edit Button */}
+                      <button onClick={() => openEditModal(txn)} className="p-1 text-blue-600 hover:bg-blue-50 rounded">
+                        <Pencil className="w-4 h-4"/>
+                      </button>
+                      {/* Delete Button */}
+                      <button onClick={() => setDeleteConfirmId(txn._rowIndex)} className="p-1 text-rose-600 hover:bg-rose-50 rounded">
+                        <Trash2 className="w-4 h-4"/>
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
-
-        {/* Table Footer */}
-        <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100">
-          <p className="text-xs text-slate-500">
-            Showing <span className="font-semibold text-slate-700">{filtered.length}</span> of{' '}
-            <span className="font-semibold text-slate-700">{transactions.length}</span> transactions
-          </p>
-          <div className="flex items-center gap-1">
-            <button className="px-3 py-1.5 text-xs font-medium text-slate-500 rounded-lg hover:bg-slate-100 disabled:opacity-40" disabled>
-              Previous
-            </button>
-            <button className="px-3 py-1.5 text-xs font-medium bg-brand-600 text-white rounded-lg">1</button>
-            <button className="px-3 py-1.5 text-xs font-medium text-slate-500 rounded-lg hover:bg-slate-100">
-              Next
-            </button>
-          </div>
-        </div>
       </div>
 
-      {/* Add Transaction Modal */}
-      {showAddModal && <AddTransactionModal onClose={() => setShowAddModal(false)} onAdd={handleAdd} />}
-    </div>
-  );
-}
-
-function AddTransactionModal({
-  onClose,
-  onAdd,
-}: {
-  onClose: () => void;
-  onAdd: (tx: Omit<CashBankTransaction, 'id'>) => void;
-}) {
-  const [form, setForm] = useState<Omit<CashBankTransaction, 'id'>>({
-    date: new Date().toISOString().split('T')[0],
-    type: 'Receipt',
-    account: 'Bank - Operating',
-    description: '',
-    counterparty: '',
-    amount: 0,
-    currency: 'USD',
-    status: 'Pending',
-    reference: '',
-  });
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.description || !form.counterparty || form.amount <= 0) return;
-    onAdd(form);
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-          <h3 className="font-bold text-slate-800 text-lg">New Transaction</h3>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400">
-            <X className="w-5 h-5" />
-          </button>
+      {/* ၁၀.၄ Delete Confirmation Popup */}
+      {deleteConfirmId !== null && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+          <div className="bg-white w-full max-w-sm rounded-xl shadow-2xl p-6 text-center">
+            <Trash2 className="w-8 h-8 text-rose-600 mx-auto mb-4" />
+            <h3 className="text-lg font-bold text-slate-800 mb-2">Delete Transaction?</h3>
+            <p className="text-sm text-slate-500 mb-6">Are you sure you want to delete this entry?</p>
+            <div className="flex justify-center gap-3">
+              <button onClick={() => setDeleteConfirmId(null)} className="px-4 py-2 text-sm text-slate-600 border rounded-lg hover:bg-slate-50">Cancel</button>
+              <button onClick={confirmDelete} disabled={isDeleting} className="px-4 py-2 text-sm text-white bg-rose-600 rounded-lg hover:bg-rose-700">{isDeleting ? 'Deleting...' : 'Delete'}</button>
+            </div>
+          </div>
         </div>
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1.5">Type</label>
-              <select
-                value={form.type}
-                onChange={(e) => setForm({ ...form, type: e.target.value as TransactionType })}
-                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:border-brand-300 focus:ring-2 focus:ring-brand-100 outline-none"
-              >
-                <option value="Receipt">Receipt</option>
-                <option value="Payment">Payment</option>
-              </select>
+      )}
+
+      {/* ၁၀.၅ Modal Form (Add/Edit Entry) အပိုင်းအစ */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white w-full max-w-3xl rounded-xl shadow-2xl my-8">
+            
+            {/* ၁၀.၅.၁ ခေါင်းစဉ်နှင့် Tab အပိုင်း */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50 rounded-t-xl">
+              <h3 className="text-lg font-bold text-slate-800">{editingRow ? "Edit Transaction" : "New Transaction"}</h3>
+              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
             </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1.5">Date</label>
-              <input
-                type="date"
-                value={form.date}
-                onChange={(e) => setForm({ ...form, date: e.target.value })}
-                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:border-brand-300 focus:ring-2 focus:ring-brand-100 outline-none"
-              />
-            </div>
+            
+            <form onSubmit={handleSubmit} className="p-6 space-y-5">
+              <div className="flex gap-4 p-1 bg-slate-100 rounded-lg w-fit">
+                {(['Expense', 'Income', 'Transfer'] as const).map(type => (
+                  <button
+                    key={type} type="button" onClick={() => setTxnType(type)}
+                    className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${txnType === type ? 'bg-white text-brand-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                  >
+                    {type}
+                  </button>
+                ))}
+              </div>
+
+              {/* ၁၀.၅.၂ အချက်အလက်ဖြည့်ရန် (Date, Voucher, Reference, Project) */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Date</label>
+                  <input type="date" name="Date" value={formData.Date} onChange={handleInputChange} required className="w-full px-3 py-2 border rounded-lg text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Voucher No</label>
+                  <input type="text" name="Voucher_No" value={formData.Voucher_No} onChange={handleInputChange} required className="w-full px-3 py-2 border rounded-lg text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Reference No</label>
+                  <input type="text" name="Reference_No" value={formData.Reference_No} onChange={handleInputChange} className="w-full px-3 py-2 border rounded-lg text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Project Code</label>
+                  <input type="text" name="Project_Code" value={formData.Project_Code} onChange={handleInputChange} className="w-full px-3 py-2 border rounded-lg text-sm" />
+                </div>
+              </div>
+
+              {/* ၁၀.၅.၃ စာရင်းသွင်းရန် (Book နှင့် Account Code) */}
+              <div className="p-4 bg-slate-50 rounded-lg border border-slate-100 space-y-4">
+                {txnType === 'Transfer' ? (
+                  <>
+                    <div className="flex flex-col md:flex-row items-center gap-4">
+                      <div className="flex-1 w-full">
+                        <label className="block text-xs font-medium text-slate-500 mb-1">From Book (Credit Out)</label>
+                        <select name="From_Book" value={formData.From_Book} onChange={handleInputChange} required className="w-full px-3 py-2 border rounded-lg text-sm bg-white">
+                          <option value="">Select Book...</option>
+                          {bookAccounts.map((acc: any, i: number) => <option key={i} value={acc.Book}>{acc.Book}</option>)}
+                        </select>
+                      </div>
+                      <div className="flex-1 w-full md:w-auto">
+                        <label className="block text-xs font-medium text-slate-500 mb-1">Amount ({formData.From_Book ? String(formData.From_Book).slice(-3) : ''})</label>
+                        <input type="number" name="Amount" value={formData.Amount} onChange={handleInputChange} required placeholder="0.00" className="w-full px-3 py-2 border rounded-lg text-sm bg-white" />
+                      </div>
+                    </div>
+                    <div className="flex flex-col md:flex-row items-center gap-4">
+                      <div className="flex-1 w-full">
+                        <label className="block text-xs font-medium text-slate-500 mb-1">To Book (Debit In)</label>
+                        <select name="To_Book" value={formData.To_Book} onChange={handleInputChange} required className="w-full px-3 py-2 border rounded-lg text-sm bg-white">
+                          <option value="">Select Book...</option>
+                          {bookAccounts.map((acc: any, i: number) => <option key={i} value={acc.Book}>{acc.Book}</option>)}
+                        </select>
+                      </div>
+                      <div className="flex-1 w-full md:w-auto">
+                        <label className="block text-xs font-medium text-slate-500 mb-1">Amount ({formData.To_Book ? String(formData.To_Book).slice(-3) : ''})</label>
+                        <input type="number" name="To_Amount" value={formData.To_Amount} onChange={handleInputChange} required placeholder="0.00" className="w-full px-3 py-2 border rounded-lg text-sm bg-white" />
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-500 mb-1">Book Name</label>
+                      <select name="Book_Name" value={formData.Book_Name} onChange={handleInputChange} required className="w-full px-3 py-2 border rounded-lg text-sm bg-white">
+                        <option value="">Select Book...</option>
+                        {bookAccounts.map((acc: any, i: number) => <option key={i} value={acc.Book}>{acc.Book}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-500 mb-1">Account Code</label>
+                      <select name="Account_Code" value={formData.Account_Code} onChange={handleInputChange} required className="w-full px-3 py-2 border rounded-lg text-sm bg-white">
+                        <option value="">Select Code...</option>
+                        {generalAccounts.map((acc: any, i: number) => <option key={i} value={acc.Account_Code}>{acc.Account_Code} - {acc.Account_Name}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* ၁၀.၅.၄ Receiver နှင့် Description အပိုင်း */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Receiver / Payer Name</label>
+                  <input type="text" name="Receiver" value={formData.Receiver} onChange={handleInputChange} className="w-full px-3 py-2 border rounded-lg text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Description</label>
+                  <input type="text" name="Description" value={formData.Description} onChange={handleInputChange} required className="w-full px-3 py-2 border rounded-lg text-sm" />
+                </div>
+              </div>
+
+              {/* ၁၀.၅.၅ ငွေကြေးတွက်ချက်မှု နှင့် ခလုတ်များ */}
+              <div className="p-4 bg-emerald-50/50 rounded-lg border border-emerald-100 space-y-4">
+                {txnType !== 'Transfer' && (
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">Amount ({formData.Txn_Currency})</label>
+                    <input type="number" name="Amount" value={formData.Amount} onChange={handleInputChange} required placeholder="0.00" className="w-full px-3 py-2 border-2 border-brand-200 rounded-lg text-sm outline-none focus:border-brand-500 bg-white" />
+                  </div>
+                )}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">Exchange Rate (To MMK)</label>
+                    <input 
+                      type="number" name="Exchange_Rate" value={formData.Exchange_Rate} onChange={handleInputChange} 
+                      disabled={formData.Txn_Currency === 'MMK'} // 🟢 Logic မှန်ကန်အောင် ပြင်ထားသည် 🟢
+                      className="w-full px-3 py-2 border rounded-lg text-sm disabled:bg-slate-100 disabled:text-slate-500 bg-white" 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">Base Amount (MMK)</label>
+                    <input 
+                      type="number" name="Base_Amount_MMK" value={formData.Base_Amount_MMK} onChange={handleInputChange} required
+                      className="w-full px-3 py-2 border rounded-lg text-sm bg-white focus:border-brand-500 outline-none" 
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-4 flex justify-end gap-3 border-t border-slate-100">
+                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-sm text-slate-600 border rounded-lg hover:bg-slate-50">Cancel</button>
+                <button type="submit" disabled={isSubmitting} className="px-5 py-2 text-sm text-white bg-brand-600 rounded-lg hover:bg-brand-700">
+                  {isSubmitting ? 'Saving...' : 'Save Transaction'}
+                </button>
+              </div>
+            </form>
           </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1.5">Account</label>
-            <select
-              value={form.account}
-              onChange={(e) => setForm({ ...form, account: e.target.value })}
-              className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:border-brand-300 focus:ring-2 focus:ring-brand-100 outline-none"
-            >
-              <option value="Bank - Operating">Bank - Operating</option>
-              <option value="Bank - Payroll">Bank - Payroll</option>
-              <option value="Bank - Savings">Bank - Savings</option>
-              <option value="Cash - Petty">Cash - Petty</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1.5">Description</label>
-            <input
-              type="text"
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-              placeholder="e.g. Customer payment - INV-2026-0060"
-              className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:border-brand-300 focus:ring-2 focus:ring-brand-100 outline-none"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1.5">Counterparty</label>
-            <input
-              type="text"
-              value={form.counterparty}
-              onChange={(e) => setForm({ ...form, counterparty: e.target.value })}
-              placeholder="e.g. Acme Corporation"
-              className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:border-brand-300 focus:ring-2 focus:ring-brand-100 outline-none"
-              required
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1.5">Amount</label>
-              <input
-                type="number"
-                value={form.amount || ''}
-                onChange={(e) => setForm({ ...form, amount: parseFloat(e.target.value) || 0 })}
-                placeholder="0.00"
-                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:border-brand-300 focus:ring-2 focus:ring-brand-100 outline-none"
-                required
-                min={0}
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1.5">Reference</label>
-              <input
-                type="text"
-                value={form.reference}
-                onChange={(e) => setForm({ ...form, reference: e.target.value })}
-                placeholder="e.g. DEP-10236"
-                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:border-brand-300 focus:ring-2 focus:ring-brand-100 outline-none"
-              />
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1.5">Status</label>
-            <select
-              value={form.status}
-              onChange={(e) => setForm({ ...form, status: e.target.value as TransactionStatus })}
-              className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:border-brand-300 focus:ring-2 focus:ring-brand-100 outline-none"
-            >
-              <option value="Pending">Pending</option>
-              <option value="Completed">Completed</option>
-              <option value="Reconciled">Reconciled</option>
-            </select>
-          </div>
-          <div className="flex items-center justify-end gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="px-4 py-2 text-sm font-medium bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors shadow-sm shadow-brand-500/20"
-            >
-              Add Transaction
-            </button>
-          </div>
-        </form>
-      </div>
+        </div>
+      )}
     </div>
   );
 }

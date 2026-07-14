@@ -1,11 +1,22 @@
+// src/components/Header.tsx
+
+// ==========================================
+// ၁။ လိုအပ်သော Packages နှင့် Icons များ ခေါ်ယူခြင်း (LogOut Icon အသစ်ပါဝင်သည်)
+// ==========================================
 import { useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Menu, Search, Bell, ChevronDown } from 'lucide-react';
+import { Menu, Search, Bell, LogOut } from 'lucide-react';
 
+// ==========================================
+// ၂။ Header တွင် လက်ခံမည့် Props များ (User နှင့် Logout လုပ်ဆောင်ချက် ထပ်တိုးထားသည်)
+// ==========================================
 interface HeaderProps {
-  onMenuClick: () => void;
+  onMenuClick?: () => void;
+  user?: any;               // Login ဝင်ထားသော User Data
+  onLogout?: () => void;    // ထွက်ရန် Function
 }
 
+// စာမျက်နှာအလိုက် ပေါ်မည့် ခေါင်းစဉ်များ
 const pageTitles: Record<string, { title: string; subtitle: string }> = {
   '/': { title: 'Dashboard', subtitle: 'Financial overview & key metrics' },
   '/master/chart-of-accounts': { title: 'Chart of Accounts', subtitle: 'Master data setup' },
@@ -31,7 +42,7 @@ const pageTitles: Record<string, { title: string; subtitle: string }> = {
   '/reports/balance-sheet': { title: 'Balance Sheet', subtitle: 'Financial reporting' },
 };
 
-export default function Header({ onMenuClick }: HeaderProps) {
+export default function Header({ onMenuClick, user, onLogout }: HeaderProps) {
   const location = useLocation();
   const [notifOpen, setNotifOpen] = useState(false);
   const page = pageTitles[location.pathname] ?? { title: 'Nexus ERP', subtitle: '' };
@@ -44,6 +55,10 @@ export default function Header({ onMenuClick }: HeaderProps) {
 
   return (
     <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 lg:px-6 sticky top-0 z-20">
+      
+      {/* ========================================== */}
+      {/* ၃။ ဘယ်ဘက်ခြမ်း (Menu ခလုတ် နှင့် စာမျက်နှာ ခေါင်းစဉ်) */}
+      {/* ========================================== */}
       <div className="flex items-center gap-4">
         <button
           onClick={onMenuClick}
@@ -58,7 +73,10 @@ export default function Header({ onMenuClick }: HeaderProps) {
       </div>
 
       <div className="flex items-center gap-2 lg:gap-4">
-        {/* Search */}
+        
+        {/* ========================================== */}
+        {/* ၄။ ညာဘက်ခြမ်း (Search Bar) */}
+        {/* ========================================== */}
         <div className="relative hidden md:block">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
@@ -68,7 +86,9 @@ export default function Header({ onMenuClick }: HeaderProps) {
           />
         </div>
 
-        {/* Notifications */}
+        {/* ========================================== */}
+        {/* ၅။ အသိပေးချက်များ (Notifications) */}
+        {/* ========================================== */}
         <div className="relative">
           <button
             onClick={() => setNotifOpen(!notifOpen)}
@@ -106,16 +126,35 @@ export default function Header({ onMenuClick }: HeaderProps) {
           )}
         </div>
 
-        {/* User Profile */}
+        {/* ========================================== */}
+        {/* ၆။ User Profile နှင့် Logout ခလုတ် (Dynamic အဖြစ် ပြင်ဆင်ထားသည်) */}
+        {/* ========================================== */}
         <div className="flex items-center gap-2.5 pl-2 lg:pl-3 lg:border-l border-slate-200">
-          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center text-white text-sm font-bold shrink-0">
-            SC
+          
+          {/* User ရဲ့ နာမည် ပထမဆုံး စာလုံးကို ယူပြမည် */}
+          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center text-white text-sm font-bold shrink-0 shadow-sm">
+            {user?.Username ? user.Username.charAt(0).toUpperCase() : 'U'}
           </div>
-          <div className="hidden lg:block">
-            <p className="text-sm font-semibold text-slate-800 leading-tight">Sarah Chen</p>
-            <p className="text-xs text-slate-500">Finance Manager</p>
+          
+          {/* User Name နှင့် Position */}
+          <div className="hidden lg:block pr-2">
+            <p className="text-sm font-semibold text-slate-800 leading-tight">
+              {user?.Username || 'Admin User'}
+            </p>
+            <p className="text-[11px] text-slate-500">
+              {user?.Position || 'Staff'}
+            </p>
           </div>
-          <ChevronDown className="w-4 h-4 text-slate-400 hidden lg:block" />
+
+          {/* Logout ခလုတ် */}
+          <button 
+            onClick={onLogout}
+            className="p-2 ml-1 text-rose-500 hover:bg-rose-50 hover:text-rose-600 rounded-lg transition-colors flex items-center"
+            title="Logout"
+          >
+            <LogOut className="w-5 h-5" />
+          </button>
+
         </div>
       </div>
     </header>

@@ -1,7 +1,11 @@
+// src/components/Sidebar.tsx
+
+// ==========================================
+// ၁။ လိုအပ်သော Packages များနှင့် Icons များ ခေါ်ယူခြင်း
+// ==========================================
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard,
-  Settings,
   ArrowLeftRight,
   BarChart3,
   FileText,
@@ -23,8 +27,12 @@ import {
   ScrollText,
   BookCopy,
   X,
+  Briefcase,
 } from 'lucide-react';
 
+// ==========================================
+// ၂။ Sidebar တွင် ပေါ်မည့် Menu စာရင်းများ (Navigation Data)
+// ==========================================
 interface NavItem {
   label: string;
   path: string;
@@ -46,7 +54,11 @@ const navSections: NavSection[] = [
     items: [
       { label: 'Chart of Accounts', path: '/master/chart-of-accounts', icon: BookOpen },
       { label: 'Exchange Rates', path: '/master/exchange-rates', icon: ArrowLeftRight },
-      { label: 'Customers & Vendors', path: '/master/parties', icon: Users },
+      
+      // 🌟 အောက်ပါ ၂ ကြောင်းကို ပြင်ဆင်/အသစ်ထည့်ပါ 🌟
+      { label: 'Customers & Vendors', path: '/master/customers-vendors', icon: Users },
+      { label: 'Fixed Assets', path: '/master/fixed-assets', icon: Briefcase },
+      
       { label: 'Products / Items', path: '/master/products', icon: Boxes },
       { label: 'Projects / Cost Centers', path: '/master/projects', icon: FolderKanban },
     ],
@@ -97,6 +109,7 @@ interface SidebarProps {
 export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   return (
     <>
+      {/* Mobile Screen အတွက် Background Overlay */}
       {isOpen && (
         <div
           className="fixed inset-0 z-30 bg-slate-900/50 lg:hidden"
@@ -104,20 +117,26 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         />
       )}
 
+      {/* ========================================== */}
+      {/* ၃။ Sidebar ရဲ့ အပြင်အဆင် (Main Container) */}
+      {/* ========================================== */}
       <aside
         className={`fixed lg:static inset-y-0 left-0 z-40 w-64 bg-slate-900 text-slate-300 flex flex-col transition-transform duration-300 ${
           isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         }`}
       >
-        {/* Logo */}
+        {/* ========================================== */}
+        {/* ၃.၁ Logo နှင့် Org Name (TIS Academy သို့ ပြင်ဆင်ထားသည်) */}
+        {/* ========================================== */}
         <div className="h-16 flex items-center justify-between px-5 border-b border-slate-700/50">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-brand-400 to-brand-600 flex items-center justify-center shadow-lg shadow-brand-500/20">
-              <LayoutDashboard className="w-5 h-5 text-white" strokeWidth={2.5} />
+            {/* Logo ပုံထည့်သွင်းခြင်း */}
+            <div className="w-9 h-9 rounded-lg bg-white flex items-center justify-center p-1 shadow-lg">
+              <img src="/images/tis_logo.png" alt="TIS Logo" className="w-full h-full object-contain" />
             </div>
             <div>
-              <h1 className="text-white font-bold text-lg leading-none tracking-tight">Nexus</h1>
-              <p className="text-[10px] text-slate-500 uppercase tracking-widest mt-0.5">ERP System</p>
+              <h1 className="text-white font-bold text-lg leading-none tracking-tight">TIS Academy</h1>
+              <p className="text-[10px] text-slate-400 uppercase tracking-widest mt-0.5">Financial System</p>
             </div>
           </div>
           <button onClick={onClose} className="lg:hidden text-slate-400 hover:text-white">
@@ -125,8 +144,10 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           </button>
         </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-5">
+        {/* ========================================== */}
+        {/* ၃.၂ Menu ခလုတ်များ (Navigation Links) */}
+        {/* ========================================== */}
+        <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-5 custom-scrollbar">
           {navSections.map((section) => (
             <div key={section.title}>
               <p className="px-3 text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-2">
@@ -156,17 +177,12 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           ))}
         </nav>
 
-        {/* Footer */}
-        <div className="px-3 py-3 border-t border-slate-700/50">
-          <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-slate-800/50">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center text-white text-xs font-bold">
-              SC
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm text-white font-medium truncate">Sarah Chen</p>
-              <p className="text-[11px] text-slate-500 truncate">Finance Manager</p>
-            </div>
-            <Settings className="w-4 h-4 text-slate-500" />
+        {/* ========================================== */}
+        {/* ၃.၃ Footer အပိုင်း (ရှင်းလင်းအောင် ပြင်ဆင်ထားသည်) */}
+        {/* ========================================== */}
+        <div className="px-3 py-4 border-t border-slate-700/50">
+          <div className="flex items-center justify-center text-[11px] text-slate-500 tracking-wider">
+            &copy; {new Date().getFullYear()} TIS Academy. All rights reserved.
           </div>
         </div>
       </aside>
