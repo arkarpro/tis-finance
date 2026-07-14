@@ -5,7 +5,7 @@ import { Plus, Search, X, Pencil, Trash2, MoreHorizontal, Eye, Boxes, AlertTrian
 import { googleSheetsService } from '../services/googleSheetsService';
 
 export default function ProductsPage() {
-  const SHEET_NAME = '1_Product_Master';
+  const SHEET_NAME = '1_Product_Master'; // Sheet အမည်ကို ပြင်ဆင်ထားသည်
 
   const [products, setProducts] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -19,7 +19,7 @@ export default function ProductsPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [openMenuIndex, setOpenMenuIndex] = useState<number | null>(null);
 
-  // Database ရှိ ကော်လံ ၁၉ ခု
+  // Database ရှိ ကော်လံ ၁၉ ခု အားလုံးကို Form State အဖြစ် သတ်မှတ်ခြင်း
   const initialForm = {
     Product_ID: '', Product_Name: '', Description: '', Starting_Inventory: '0', 
     Re_Order_Point: '0', UOM: 'Pcs', Category: '', Track_Inventory: 'Yes', 
@@ -34,11 +34,9 @@ export default function ProductsPage() {
     setIsLoading(true);
     try {
       const data = await googleSheetsService.readData(SHEET_NAME);
-      // Data မရှိရင် Empty Array အဖြစ် သတ်မှတ်ပေးရန်
-      setProducts(data || []); 
-    } catch (err: any) {
-      console.error("Fetch Error: ", err); // Error အစစ်ကို Console တွင် ကြည့်ရန်
-      alert(`Products Data များ ရယူရာတွင် အခက်အခဲရှိနေပါသည်။\nError: ${err.message || 'Unknown Error'}`);
+      setProducts(data);
+    } catch (err) {
+      alert("Products Data များ ရယူရာတွင် အခက်အခဲရှိနေပါသည်။");
     } finally {
       setIsLoading(false);
     }
@@ -63,10 +61,9 @@ export default function ProductsPage() {
       setIsModalOpen(false);
       setEditingRow(null);
       setFormData(initialForm);
-      await fetchProducts(); // Save လုပ်ပြီးပါက Data အသစ်ပြန်ခေါ်ရန် 'await' ထည့်ထားသည်
-    } catch (err: any) {
-      console.error("Submit Error: ", err); // Error အစစ်ကို Console တွင် ကြည့်ရန်
-      alert(`Data သိမ်းဆည်းရာတွင် အမှားအယွင်းဖြစ်ပေါ်ခဲ့ပါသည်။\nError: ${err.message || 'Check Console for details.'}`);
+      fetchProducts();
+    } catch (err) {
+      alert("Data သိမ်းဆည်းရာတွင် အမှားအယွင်းဖြစ်ပေါ်ခဲ့ပါသည်။");
     } finally {
       setIsSubmitting(false);
     }
@@ -79,9 +76,8 @@ export default function ProductsPage() {
       await googleSheetsService.deleteData(SHEET_NAME, deleteConfirmId);
       setProducts(prev => prev.filter(p => p._rowIndex !== deleteConfirmId));
       setDeleteConfirmId(null);
-    } catch (err: any) {
-      console.error("Delete Error: ", err);
-      alert(`Data ဖျက်ရာတွင် အမှားအယွင်းဖြစ်ပေါ်ခဲ့ပါသည်။\nError: ${err.message}`);
+    } catch (err) {
+      alert("Data ဖျက်ရာတွင် အမှားအယွင်းဖြစ်ပေါ်ခဲ့ပါသည်။");
     } finally {
       setIsDeleting(false);
     }
@@ -121,38 +117,23 @@ export default function ProductsPage() {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {/* Data ယူနေဆဲ အခြေအနေကို ပြရန် (Loading State) */}
-              {isLoading ? (
-                <tr>
-                  <td colSpan={5} className="p-8 text-center text-slate-500">
-                    Loading Data...
+              {filteredProducts.map((p, i) => (
+                <tr key={i} className="hover:bg-slate-50">
+                  <td className="p-4 font-bold text-brand-700">{p.Product_ID}</td>
+                  <td className="p-4 font-medium">{p.Product_Name}</td>
+                  <td className="p-4">{p.Category}</td>
+                  <td className="p-4 text-right">${Number(p.Avg_Unit_Price).toLocaleString()}</td>
+                  <td className="p-4 relative text-center">
+                    <button onClick={() => setOpenMenuIndex(openMenuIndex === i ? null : i)} className="p-1 hover:bg-slate-200 rounded"><MoreHorizontal className="w-4 h-4"/></button>
+                    {openMenuIndex === i && (
+                      <div className="absolute right-12 top-2 w-32 bg-white shadow-xl border rounded-lg z-20 text-left">
+                        <button onClick={() => { setEditingRow(p); setFormData(p); setIsModalOpen(true); setOpenMenuIndex(null); }} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-blue-600 hover:bg-slate-50"><Pencil className="w-4 h-4"/> Edit</button>
+                        <button onClick={() => { setDeleteConfirmId(p._rowIndex); setOpenMenuIndex(null); }} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-rose-600 hover:bg-slate-50"><Trash2 className="w-4 h-4"/> Delete</button>
+                      </div>
+                    )}
                   </td>
                 </tr>
-              ) : filteredProducts.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="p-8 text-center text-slate-500">
-                    No products found.
-                  </td>
-                </tr>
-              ) : (
-                filteredProducts.map((p, i) => (
-                  <tr key={i} className="hover:bg-slate-50">
-                    <td className="p-4 font-bold text-brand-700">{p.Product_ID}</td>
-                    <td className="p-4 font-medium">{p.Product_Name}</td>
-                    <td className="p-4">{p.Category}</td>
-                    <td className="p-4 text-right">${Number(p.Avg_Unit_Price || 0).toLocaleString()}</td>
-                    <td className="p-4 relative text-center">
-                      <button onClick={() => setOpenMenuIndex(openMenuIndex === i ? null : i)} className="p-1 hover:bg-slate-200 rounded"><MoreHorizontal className="w-4 h-4"/></button>
-                      {openMenuIndex === i && (
-                        <div className="absolute right-12 top-2 w-32 bg-white shadow-xl border rounded-lg z-20 text-left">
-                          <button onClick={() => { setEditingRow(p); setFormData({ ...initialForm, ...p }); setIsModalOpen(true); setOpenMenuIndex(null); }} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-blue-600 hover:bg-slate-50"><Pencil className="w-4 h-4"/> Edit</button>
-                          <button onClick={() => { setDeleteConfirmId(p._rowIndex); setOpenMenuIndex(null); }} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-rose-600 hover:bg-slate-50"><Trash2 className="w-4 h-4"/> Delete</button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))
-              )}
+              ))}
             </tbody>
           </table>
         </div>
@@ -167,16 +148,13 @@ export default function ProductsPage() {
               {Object.keys(initialForm).map((key) => (
                 <div key={key}>
                   <label className="block text-xs font-semibold uppercase mb-1">{key.replace(/_/g, ' ')}</label>
-                  {/* undefined ဖြစ်ခြင်းမှ ကာကွယ်ရန် formData[key] || '' ဟု ပြင်ဆင်ထားသည် */}
-                  <input name={key} value={formData[key] || ''} onChange={handleInputChange} className="w-full border p-2 rounded text-sm" />
+                  <input name={key} value={formData[key]} onChange={handleInputChange} className="w-full border p-2 rounded text-sm" />
                 </div>
               ))}
             </div>
             <div className="flex justify-end gap-2 mt-4">
               <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 border rounded">Cancel</button>
-              <button type="submit" disabled={isSubmitting} className={`px-4 py-2 text-white rounded ${isSubmitting ? 'bg-brand-400' : 'bg-brand-600'}`}>
-                {isSubmitting ? "Saving..." : "Save"}
-              </button>
+              <button type="submit" className="px-4 py-2 bg-brand-600 text-white rounded">{isSubmitting ? "Saving..." : "Save"}</button>
             </div>
           </form>
         </div>
