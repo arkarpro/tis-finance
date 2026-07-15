@@ -1,40 +1,12 @@
 // src/services/googleSheetsService.ts
 
-// 🌟 ၁။ URL အသစ်နှင့် အဟောင်းများကို စနစ်တကျ ကြေညာခြင်း
-const AUTH_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbwoMlr_08HP2Q3Qz1GPPK4j_z3ZMy_DcgtQkfZIBipRyZqOD6NyliT4NtSQoZ6F6XIrcg/exec'; // Login
-const DATA_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzIhbs0Wnhc-I1bjPicNUu5sxlhV86fC9gzNwDr2cl5gbntk1Zvf6JH36JoKogjLODy/exec'; // Accounting Data
-const INVENTORY_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxPH6BkUvw6mNTpeKOrIa9sTqajD5V0lBPrfKXlp5QxciCI_NGvtTac0yq-joaZzTvR/exec'; // Inventory Data
-
-// src/services/googleSheetsService.ts ထဲမှ getTargetUrl function ကို ရှာပြီး အောက်ပါအတိုင်း ပြင်ပါ
-
-const getTargetUrl = (sheetName: string) => {
-  // Authentication အတွက်
-  if (sheetName === '0_Users') return AUTH_WEB_APP_URL;
-
-  // Inventory နှင့် သက်ဆိုင်သော Sheet များစာရင်း 🌟
-  const inventorySheets = [
-    '1_Product_Master', 
-    '2_Warehouse_Locations', // <--- ဒီနေရာမှာ ထည့်ပေးပါ
-    '3_Goods_Receipt_IN', 
-    '4_Goods_Issue_OUT', 
-    '5_Inventory_Movements', 
-    '6_Inventory_Balance'
-  ];
-
-  // Projects က 10_Projects ဆိုရင် inventory_db ဘက်ကိုသွားမှာပါ
-  if (inventorySheets.includes(sheetName) || sheetName === '10_Projects') {
-    return INVENTORY_WEB_APP_URL;
-  }
-
-  // ကျန်ရှိသော Accounting Data များအတွက် (financial_db)
-  return DATA_WEB_APP_URL;
-};
+// 🌟 ဗဟိုထိန်းချုပ်စနစ် (Centralized API) အတွက် Master URL တစ်ခုတည်းကိုသာ အသုံးပြုပါမည်
+const MASTER_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbzsw6lbuGqM9Rb6WZzgE9vZMDPlo9XPBKYmiMSYFfGiOnxRE1CZI3zZIizFKHrLBJsy1Q/exec';
 
 export const googleSheetsService = {
   readData: async (sheetName: string) => {
-    const baseUrl = getTargetUrl(sheetName);
     try {
-      const response = await fetch(`${baseUrl}?action=read&sheet=${sheetName}`);
+      const response = await fetch(`${MASTER_WEB_APP_URL}?action=read&sheet=${sheetName}`);
       const result = await response.json();
       if (result.status === 'success') {
         return result.data;
@@ -47,9 +19,8 @@ export const googleSheetsService = {
   },
 
   writeData: async (sheetName: string, data: any) => {
-    const baseUrl = getTargetUrl(sheetName);
     try {
-      const response = await fetch(`${baseUrl}?action=write&sheet=${sheetName}`, {
+      const response = await fetch(`${MASTER_WEB_APP_URL}?action=write&sheet=${sheetName}`, {
         method: 'POST',
         body: JSON.stringify(data),
         headers: { 'Content-Type': 'text/plain;charset=utf-8' }
@@ -66,9 +37,8 @@ export const googleSheetsService = {
   },
 
   updateData: async (sheetName: string, data: any) => {
-    const baseUrl = getTargetUrl(sheetName);
     try {
-      const response = await fetch(`${baseUrl}?action=update&sheet=${sheetName}`, {
+      const response = await fetch(`${MASTER_WEB_APP_URL}?action=update&sheet=${sheetName}`, {
         method: 'POST',
         body: JSON.stringify(data),
         headers: { 'Content-Type': 'text/plain;charset=utf-8' }
@@ -85,9 +55,8 @@ export const googleSheetsService = {
   },
 
   deleteData: async (sheetName: string, rowIndex: number) => {
-    const baseUrl = getTargetUrl(sheetName);
     try {
-      const response = await fetch(`${baseUrl}?action=delete&sheet=${sheetName}`, {
+      const response = await fetch(`${MASTER_WEB_APP_URL}?action=delete&sheet=${sheetName}`, {
         method: 'POST',
         body: JSON.stringify({ _rowIndex: rowIndex }),
         headers: { 'Content-Type': 'text/plain;charset=utf-8' }
