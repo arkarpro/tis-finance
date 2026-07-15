@@ -169,6 +169,12 @@ export default function FixedAssets() {
         </button>
       </div>
 
+      {error && (
+        <div className="bg-rose-50 border border-rose-100 text-rose-800 px-4 py-2 rounded-md text-sm">
+          {error}
+        </div>
+      )}
+
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
         
         {/* ၇.၂ Search Bar */}

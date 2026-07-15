@@ -181,6 +181,12 @@ export default function CustomersVendors() {
         </button>
       </div>
 
+      {error && (
+        <div className="bg-rose-50 border border-rose-100 text-rose-700 px-4 py-2 rounded-lg text-sm">
+          {error}
+        </div>
+      )}
+
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
         
         {/* ၇.၂ Search Bar */}

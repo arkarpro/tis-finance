@@ -4,7 +4,7 @@
 // ၁။ လိုအပ်သော Packages နှင့် Icons များ ခေါ်ယူခြင်း
 // ==========================================
 import { useState, useEffect } from 'react';
-import { Plus, Search, X, Pencil, Trash2, MoreHorizontal, Eye, ScrollText, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Plus, Search, Pencil, Trash2, MoreHorizontal, Eye, ScrollText, CheckCircle2, AlertCircle } from 'lucide-react';
 import { googleSheetsService } from '../services/googleSheetsService';
 
 export default function JournalVouchersPage() {

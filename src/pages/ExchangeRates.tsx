@@ -165,6 +165,9 @@ export default function ExchangeRates() {
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
         
         {/* ၇.၂ Search Bar */}
+          {error && (
+            <div className="p-4 text-sm text-rose-600">{error}</div>
+          )}
         <div className="p-4 border-b border-slate-100 flex items-center gap-4 bg-slate-50/50">
           <div className="relative flex-1 max-w-md">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />

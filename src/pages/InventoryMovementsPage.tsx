@@ -1,7 +1,7 @@
 // src/pages/InventoryMovementsPage.tsx
 
 import { useState, useEffect } from 'react';
-import { Plus, Search, X, Pencil, Trash2, MoreHorizontal, ArrowRightLeft, PackagePlus, PackageMinus, Activity } from 'lucide-react';
+import { Plus, Search, Pencil, Trash2, MoreHorizontal, ArrowRightLeft, PackagePlus, PackageMinus, Activity } from 'lucide-react';
 import { googleSheetsService } from '../services/googleSheetsService';
 
 export default function InventoryMovementsPage() {
@@ -15,9 +15,9 @@ export default function InventoryMovementsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   const [searchQuery, setSearchQuery] = useState('');
-  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
   const [openMenuIndex, setOpenMenuIndex] = useState<number | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
+  const [, setIsDeleting] = useState(false);
 
   // ကော်လံအမည်များ အတိအကျ အသုံးပြုထားပါသည်
   const initialForm = {
@@ -42,6 +42,14 @@ export default function InventoryMovementsPage() {
   };
 
   useEffect(() => { fetchMovements(); }, []);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <p className="text-sm text-slate-500">Loading inventory movements...</p>
+      </div>
+    );
+  }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -93,6 +101,12 @@ export default function InventoryMovementsPage() {
       setIsDeleting(false);
     }
   };
+
+  useEffect(() => {
+    if (deleteConfirmId !== null) {
+      confirmDelete();
+    }
+  }, [deleteConfirmId]);
 
   const filteredMovements = movements.filter(mov => 
     (mov.Product_ID?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
