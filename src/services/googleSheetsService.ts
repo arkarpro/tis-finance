@@ -11,21 +11,22 @@ const getTargetUrl = (sheetName: string) => {
   // Authentication အတွက်
   if (sheetName === '0_Users') return AUTH_WEB_APP_URL;
 
-  // Inventory နှင့် သက်ဆိုင်သော Sheet များစာရင်း (ဒီထဲမှာ 1_Product_Master ကို ထပ်ထည့်လိုက်ပါပြီ) 🌟
+  // Inventory နှင့် သက်ဆိုင်သော Sheet များစာရင်း 🌟
   const inventorySheets = [
-    '1_Product_Master',      // <--- ဒီနေရာမှာ အသစ်ထပ်ထည့်လိုက်ပါ
+    '1_Product_Master', 
+    '2_Warehouse_Locations', // <--- ဒီနေရာမှာ ထည့်ပေးပါ
     '3_Goods_Receipt_IN', 
     '4_Goods_Issue_OUT', 
     '5_Inventory_Movements', 
-    '6_Inventory_Balance',
-    '9_Projects' // အကယ်၍ 10_Projects သို့ ပြောင်းထားပါက '10_Projects' ဟု ပြင်ပါ
+    '6_Inventory_Balance'
   ];
 
-  if (inventorySheets.includes(sheetName)) {
+  // Projects က 10_Projects ဆိုရင် inventory_db ဘက်ကိုသွားမှာပါ
+  if (inventorySheets.includes(sheetName) || sheetName === '10_Projects') {
     return INVENTORY_WEB_APP_URL;
   }
 
-  // ကျန်ရှိသော Accounting Data များအတွက်
+  // ကျန်ရှိသော Accounting Data များအတွက် (financial_db)
   return DATA_WEB_APP_URL;
 };
 
