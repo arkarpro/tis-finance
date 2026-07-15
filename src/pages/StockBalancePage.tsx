@@ -1,7 +1,7 @@
 // src/pages/StockBalancePage.tsx
 
 import { useState, useEffect } from 'react';
-import { Search, Scale, AlertTriangle, Boxes, DollarSign, RefreshCw } from 'lucide-react';
+import { Search, AlertTriangle, Boxes, DollarSign, RefreshCw } from 'lucide-react';
 import { googleSheetsService } from '../services/googleSheetsService';
 
 export default function StockBalancePage() {

@@ -20,7 +20,6 @@ import {
   FileSpreadsheet,
   PackagePlus,
   PackageMinus,
-  Move3d,
   Scale,
   Wallet,
   TrendingUp,

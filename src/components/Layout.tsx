@@ -1,5 +1,6 @@
 // src/components/Layout.tsx (အတိုချုပ် ပြင်ဆင်ပုံ)
 import { Outlet } from 'react-router-dom';
+import { useState } from 'react';
 import Sidebar from './Sidebar';
 import Header from './Header';
 
@@ -11,9 +12,11 @@ interface LayoutProps {
 
 // 🌟 ၂။ Props များကို လက်ခံယူခြင်း
 export default function Layout({ user, onLogout }: LayoutProps) {
+  const [isSidebarOpen, setSidebarOpen] = useState(true);
+
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden">
-      <Sidebar />
+      <Sidebar isOpen={isSidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="flex-1 flex flex-col h-screen overflow-hidden">
         
         {/* 🌟 ၃။ Header ဆီသို့ user နှင့် onLogout ကို လက်ဆင့်ကမ်း ပို့ပေးခြင်း */}

@@ -4,7 +4,7 @@
 // ၁။ လိုအပ်သော Packages နှင့် Services များကို ခေါ်ယူခြင်း (Imports)
 // ==========================================
 import { useState, useEffect } from 'react';
-import { Plus, Search, Download, RefreshCw, X, Pencil, Trash2, ArrowRight, ArrowDownRight, ArrowUpRight, Wallet, MoreHorizontal, Eye } from 'lucide-react';
+import { Plus, Search, X, Pencil, Trash2, ArrowDownRight, ArrowUpRight, Wallet, MoreHorizontal, Eye } from 'lucide-react';
 import { googleSheetsService } from '../services/googleSheetsService';
 
 export default function CashBankPage() {
@@ -18,7 +18,7 @@ export default function CashBankPage() {
   
   // ၂.၂ Loading နှင့် Error အခြေအနေများ
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [, setError] = useState<string | null>(null);
 
   // ၂.၃ Modal (Form Box) အဖွင့်အပိတ် နှင့် Submit အခြေအနေများ
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -136,19 +136,6 @@ export default function CashBankPage() {
   // ==========================================
   // ၅။ တွက်ချက်မှုများ (Calculations - Base MMK)
   // ==========================================
-  const calculateBaseMMK = () => {
-    if (txnType === 'Transfer') {
-      const fromCurr = formData.From_Book ? String(formData.From_Book).slice(-3).toUpperCase() : '';
-      const toCurr = formData.To_Book ? String(formData.To_Book).slice(-3).toUpperCase() : '';
-      
-      if (fromCurr === 'MMK') return parseFloat(formData.Amount || '0');
-      if (toCurr === 'MMK') return parseFloat(formData.To_Amount || '0');
-      
-      return parseFloat(formData.Amount || '0') * parseFloat(formData.Exchange_Rate || '1');
-    } else {
-      return parseFloat(formData.Amount || '0') * parseFloat(formData.Exchange_Rate || '1');
-    }
-  };
 
   // ==========================================
   // ၆။ Input အပြောင်းအလဲများကို ဖမ်းယူခြင်း (Handle Inputs)
