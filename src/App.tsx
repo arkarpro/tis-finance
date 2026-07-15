@@ -62,6 +62,7 @@ export default function App() {
           <Route path="/master/fixed-assets" element={<FixedAssets />} />
           <Route path="/master/products" element={<ProductsPage />} />
           <Route path="/master/projects" element={<ProjectsPage />} />
+          <Route path="/master/warehouse-locations" element={<WarehouseLocationsPage />} /> {/* 🟢 ဒီနေရာသို့ ရွှေ့လိုက်ပါ */}
 
           {/* ၄.၂ Transactions အပိုင်း */}
           <Route path="/transactions/cash-bank" element={<CashBankPage />} />
@@ -71,7 +72,6 @@ export default function App() {
 
           {/* ၄.၃ Inventory အပိုင်း */}
           <Route path="/inventory/goods-receipt" element={<GoodsReceiptPage />} />
-          <Route path="/master/warehouse-locations" element={<WarehouseLocationsPage />} />
           <Route path="/inventory/goods-issue" element={<GoodsIssuePage />} />
           <Route path="/inventory/movements" element={<InventoryMovementsPage />} />
           <Route path="/inventory/stock-balance" element={<StockBalancePage />} />
